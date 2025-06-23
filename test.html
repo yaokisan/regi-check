@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ファイルアップロードテスト</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .test-box { border: 2px dashed #ccc; padding: 20px; margin: 20px 0; }
+        .log { background: #f5f5f5; padding: 10px; margin: 10px 0; font-family: monospace; }
+    </style>
+</head>
+<body>
+    <h1>ファイルアップロード機能テスト</h1>
+    
+    <div class="test-box">
+        <h3>CSVファイルテスト</h3>
+        <input type="file" id="testCsv" accept=".csv">
+        <div id="csvResult" class="log"></div>
+    </div>
+    
+    <div class="test-box">
+        <h3>PDFファイルテスト</h3>
+        <input type="file" id="testPdf" accept=".pdf">
+        <div id="pdfResult" class="log"></div>
+    </div>
+    
+    <script>
+        console.log('🔧 テストページ読み込み完了');
+        
+        document.getElementById('testCsv').addEventListener('change', async function(event) {
+            const file = event.target.files[0];
+            const resultDiv = document.getElementById('csvResult');
+            
+            if (!file) {
+                resultDiv.innerHTML = '❌ ファイルが選択されていません';
+                return;
+            }
+            
+            console.log('📁 CSV test file:', file.name, file.size, 'bytes');
+            resultDiv.innerHTML = `📁 選択: ${file.name} (${file.size} bytes)`;
+            
+            try {
+                // 簡単なファイル読み取りテスト
+                const arrayBuffer = await file.arrayBuffer();
+                const uint8Array = new Uint8Array(arrayBuffer);
+                
+                // UTF-16LE BOM検出
+                if (uint8Array.length >= 2 && uint8Array[0] === 0xFF && uint8Array[1] === 0xFE) {
+                    resultDiv.innerHTML += '<br>✅ UTF-16LE BOM検出';
+                    
+                    const decoder = new TextDecoder('utf-16le');
+                    const text = decoder.decode(arrayBuffer);
+                    const lines = text.split('\\n');
+                    
+                    resultDiv.innerHTML += `<br>📊 総行数: ${lines.length}`;
+                    resultDiv.innerHTML += `<br>📋 ヘッダー: ${lines[0].substring(0, 100)}...`;
+                    
+                } else {
+                    resultDiv.innerHTML += '<br>⚠️ UTF-8として読み取り';
+                    const decoder = new TextDecoder('utf-8');
+                    const text = decoder.decode(arrayBuffer);
+                    resultDiv.innerHTML += `<br>📊 文字数: ${text.length}`;
+                }
+                
+            } catch (error) {
+                console.error('CSV test error:', error);
+                resultDiv.innerHTML += `<br>❌ エラー: ${error.message}`;
+            }
+        });
+        
+        document.getElementById('testPdf').addEventListener('change', async function(event) {
+            const file = event.target.files[0];
+            const resultDiv = document.getElementById('pdfResult');
+            
+            if (!file) {
+                resultDiv.innerHTML = '❌ ファイルが選択されていません';
+                return;
+            }
+            
+            console.log('📁 PDF test file:', file.name, file.size, 'bytes');
+            resultDiv.innerHTML = `📁 選択: ${file.name} (${file.size} bytes)`;
+            
+            try {
+                const arrayBuffer = await file.arrayBuffer();
+                const uint8Array = new Uint8Array(arrayBuffer);
+                
+                // PDFヘッダー確認
+                const header = new TextDecoder('ascii').decode(uint8Array.slice(0, 20));
+                
+                if (header.startsWith('%PDF')) {
+                    resultDiv.innerHTML += `<br>✅ PDFファイル確認: ${header.substring(0, 10)}`;
+                    resultDiv.innerHTML += `<br>📊 ファイルサイズ: ${(arrayBuffer.byteLength / 1024).toFixed(1)} KB`;
+                } else {
+                    resultDiv.innerHTML += '<br>❌ PDFファイルではありません';
+                }
+                
+            } catch (error) {
+                console.error('PDF test error:', error);
+                resultDiv.innerHTML += `<br>❌ エラー: ${error.message}`;
+            }
+        });
+    </script>
+</body>
+</html>

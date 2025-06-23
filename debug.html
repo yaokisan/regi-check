@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>PDF構造分析ツール</title>
+</head>
+<body>
+    <h1>PDF構造分析</h1>
+    <input type="file" id="pdfFile" accept=".pdf">
+    <div id="results" style="font-family: monospace; white-space: pre-wrap; margin-top: 20px;"></div>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        
+        document.getElementById('pdfFile').addEventListener('change', async function(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.textContent = 'PDF分析中...';
+            
+            try {
+                const arrayBuffer = await file.arrayBuffer();
+                const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
+                
+                let allText = '';
+                
+                // 1ページ目はスキップ
+                for (let pageNum = 2; pageNum <= pdf.numPages; pageNum++) {
+                    const page = await pdf.getPage(pageNum);
+                    const textContent = await page.getTextContent();
+                    const pageText = textContent.items.map(item => item.str).join(' ');
+                    allText += pageText + '\\n';
+                }
+                
+                // 詳細分析
+                const analysis = analyzePDFText(allText);
+                resultsDiv.textContent = analysis;
+                
+            } catch (error) {
+                resultsDiv.textContent = `エラー: ${error.message}`;
+            }
+        });
+        
+        function analyzePDFText(text) {
+            let result = `PDF全文長: ${text.length}\\n`;
+            result += `PDF行数: ${text.split('\\n').length}\\n\\n`;
+            
+            // 日時パターンを検索
+            const dateTimePattern = /(\\d{4}\\/\\d{1,2}\\/\\d{1,2}\\s+\\d{1,2}:\\d{2})/g;
+            const dateTimeMatches = [];
+            let match;
+            
+            while ((match = dateTimePattern.exec(text)) !== null) {
+                dateTimeMatches.push({
+                    dateTime: match[1],
+                    index: match.index
+                });
+            }
+            
+            result += `発見した日時: ${dateTimeMatches.length}個\\n`;
+            
+            // 最初の3つの取引を詳細分析
+            for (let i = 0; i < Math.min(3, dateTimeMatches.length); i++) {
+                const current = dateTimeMatches[i];
+                const next = dateTimeMatches[i + 1];
+                
+                // 前後50文字を確認
+                const before = text.substring(Math.max(0, current.index - 50), current.index);
+                const after = text.substring(current.index, Math.min(text.length, current.index + (next ? next.index - current.index : 500)));
+                
+                result += `\\n=== 取引 ${i + 1}: ${current.dateTime} ===\\n`;
+                result += `位置: ${current.index}\\n`;
+                result += `前50文字: "${before}"\\n`;
+                result += `後の内容: "${after.substring(0, 300)}..."\\n`;
+                
+                // キーワードチェック
+                const keywords = ['適格請求書', '会計', '担当スタイリスト', '現計', 'ポイント利用額'];
+                keywords.forEach(keyword => {
+                    const hasKeyword = after.includes(keyword);
+                    result += `${keyword}: ${hasKeyword}\\n`;
+                });
+            }
+            
+            // 特定のパターンを検索
+            result += `\\n=== パターン分析 ===\\n`;
+            const patterns = [
+                { name: '適格請求書', pattern: /適格請求書/g },
+                { name: '会計日時', pattern: /会計.*?日時/g },
+                { name: '担当スタイリスト', pattern: /担当スタイリスト/g },
+                { name: '現計', pattern: /現計/g },
+                { name: 'ポイント利用額', pattern: /ポイント利用額/g }
+            ];
+            
+            patterns.forEach(p => {
+                const matches = (text.match(p.pattern) || []).length;
+                result += `${p.name}: ${matches}回\\n`;
+            });
+            
+            return result;
+        }
+    </script>
+</body>
+</html>

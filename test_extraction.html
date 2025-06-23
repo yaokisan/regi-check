@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>PDF抽出テスト</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+</head>
+<body>
+    <h1>PDF抽出テスト</h1>
+    <input type="file" id="pdfFile" accept=".pdf">
+    <div id="results" style="font-family: monospace; white-space: pre-wrap; margin-top: 20px;"></div>
+    
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        
+        document.getElementById('pdfFile').addEventListener('change', async function(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.textContent = 'PDF解析中...';
+            
+            try {
+                const arrayBuffer = await file.arrayBuffer();
+                const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
+                
+                let allText = '';
+                
+                // 1ページ目はスキップ
+                for (let pageNum = 2; pageNum <= pdf.numPages; pageNum++) {
+                    const page = await pdf.getPage(pageNum);
+                    const textContent = await page.getTextContent();
+                    const pageText = textContent.items.map(item => item.str).join(' ');
+                    allText += pageText + '\n';
+                }
+                
+                // 修正版の抽出ロジックを使用
+                const data = extractRealSalonBoardData(allText);
+                
+                let result = `PDF全文長: ${allText.length}\n`;
+                result += `抽出されたレコード数: ${data.length}\n\n`;
+                
+                data.forEach((record, i) => {
+                    result += `=== レコード ${i + 1} ===\n`;
+                    result += `日付: ${record.date}\n`;
+                    result += `時間: ${record.time}\n`;
+                    result += `担当者: ${record.staffName}\n`;
+                    result += `現計: ${record.totalAmount}円\n`;
+                    result += `ポイント: ${record.pointUsage}円\n\n`;
+                });
+                
+                resultsDiv.textContent = result;
+                
+            } catch (error) {
+                resultsDiv.textContent = `エラー: ${error.message}`;
+            }
+        });
+        
+        // 修正版のPDF抽出関数
+        function extractRealSalonBoardData(text) {
+            const data = [];
+            console.log('🔍 実際のサロンボードデータを抽出中...');
+            
+            // 「適格請求書発行事業者」で取引を分割
+            const transactions = text.split('適格請求書発行事業者').filter(t => t.trim().length > 0);
+            
+            console.log(`📝 「適格請求書発行事業者」で分割: ${transactions.length}個`);
+            
+            for (let i = 0; i < transactions.length; i++) {
+                const transaction = transactions[i];
+                console.log(`\n🔍 取引 ${i + 1}: 長さ=${transaction.length}`);
+                console.log(`  内容: ${transaction.substring(0, 200)}...`);
+                
+                try {
+                    // 日時抽出
+                    const dateTimeMatch = transaction.match(/(\d{4}\/\d{1,2}\/\d{1,2})\s+(\d{1,2}:\d{2})/);
+                    if (!dateTimeMatch) {
+                        console.log('  ❌ 日時が見つかりません');
+                        continue;
+                    }
+                    
+                    const date = dateTimeMatch[1];
+                    const time = dateTimeMatch[2];
+                    console.log(`  📅 日時: ${date} ${time}`);
+                    
+                    // 担当者抽出（スペースを考慮）
+                    const staffMatch = transaction.match(/担当スタイリスト\s+([^\s]+(?:\s+[^\s]+)*?)\s+レジ/);
+                    let staffName = staffMatch ? staffMatch[1].replace(/\s+/g, '') : '';
+                    
+                    // 特殊文字正規化
+                    staffName = staffName.replace(/⽥/g, '田').replace(/⼠/g, '士');
+                    console.log(`  👤 担当者: "${staffName}"`);
+                    
+                    // 現計抽出
+                    const totalMatch = transaction.match(/現計\s+([\d,]+)\s*円/);
+                    if (!totalMatch) {
+                        console.log('  ❌ 現計が見つかりません');
+                        continue;
+                    }
+                    const totalAmount = parseInt(totalMatch[1].replace(/,/g, ''));
+                    console.log(`  💰 現計: ${totalAmount}円`);
+                    
+                    // ポイント抽出
+                    const pointMatch = transaction.match(/ポイント利[⽤用]額\s+([\d,]+)\s*円/);
+                    const pointUsage = pointMatch ? parseInt(pointMatch[1].replace(/,/g, '')) : 0;
+                    console.log(`  🎯 ポイント: ${pointUsage}円`);
+                    
+                    // データを追加
+                    const record = {
+                        date: date,
+                        time: time,
+                        totalAmount: totalAmount,
+                        pointUsage: pointUsage,
+                        staffName: staffName,
+                        source: 'SalonBoard',
+                        originalLine: transaction.substring(0, 100) + '...'
+                    };
+                    
+                    data.push(record);
+                    console.log(`  ✅ 抽出成功:`, record);
+                    
+                } catch (error) {
+                    console.error(`  ❌ 取引 ${i + 1} 処理エラー:`, error);
+                }
+            }
+            
+            console.log(`🎯 最終抽出結果: ${data.length}件`);
+            return data;
+        }
+    </script>
+</body>
+</html>

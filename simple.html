@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>シンプルテスト</title>
+</head>
+<body>
+    <h1>ファイルアップロードテスト</h1>
+    
+    <div>
+        <label>CSV:</label>
+        <input type="file" id="csvFile" accept=".csv">
+        <div id="csvResult"></div>
+    </div>
+    
+    <div>
+        <label>PDF:</label>  
+        <input type="file" id="pdfFile" accept=".pdf">
+        <div id="pdfResult"></div>
+    </div>
+    
+    <script>
+        console.log('✅ Simple test page loaded');
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('🚀 DOM ready');
+            
+            const csvInput = document.getElementById('csvFile');
+            const pdfInput = document.getElementById('pdfFile');
+            
+            console.log('CSV input:', csvInput);
+            console.log('PDF input:', pdfInput);
+            
+            if (csvInput) {
+                csvInput.addEventListener('change', function(event) {
+                    console.log('📁 CSV changed');
+                    const file = event.target.files[0];
+                    if (file) {
+                        console.log('📄 CSV file:', file.name, file.size);
+                        document.getElementById('csvResult').textContent = `Selected: ${file.name}`;
+                    }
+                });
+                
+                csvInput.addEventListener('click', function() {
+                    console.log('👆 CSV clicked');
+                });
+            }
+            
+            if (pdfInput) {
+                pdfInput.addEventListener('change', function(event) {
+                    console.log('📁 PDF changed');
+                    const file = event.target.files[0];
+                    if (file) {
+                        console.log('📄 PDF file:', file.name, file.size);
+                        document.getElementById('pdfResult').textContent = `Selected: ${file.name}`;
+                    }
+                });
+                
+                pdfInput.addEventListener('click', function() {
+                    console.log('👆 PDF clicked');
+                });
+            }
+            
+            console.log('🎯 Setup complete');
+        });
+    </script>
+</body>
+</html>

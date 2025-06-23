@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>美容室売上照合システム</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-color: #f5f5f5;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 30px;
+            font-size: 2rem;
+        }
+
+        .upload-section {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .upload-box {
+            flex: 1;
+            background: white;
+            border: 2px dashed #ddd;
+            border-radius: 8px;
+            padding: 30px;
+            text-align: center;
+            transition: border-color 0.3s ease;
+        }
+
+        .upload-box:hover {
+            border-color: #3498db;
+        }
+
+        .upload-box.dragover {
+            border-color: #3498db;
+            background-color: #f8f9fa;
+        }
+
+        .upload-box h3 {
+            margin-bottom: 15px;
+            color: #2c3e50;
+        }
+
+        .file-input {
+            display: none;
+        }
+
+        .upload-btn {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s ease;
+        }
+
+        .upload-btn:hover {
+            background: #2980b9;
+        }
+
+        .file-info {
+            margin-top: 15px;
+            padding: 10px;
+            background: #e8f5e8;
+            border-radius: 4px;
+            font-size: 14px;
+            display: none;
+        }
+
+        .compare-btn {
+            display: block;
+            width: 200px;
+            margin: 0 auto 30px;
+            background: #27ae60;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 18px;
+            font-weight: bold;
+        }
+
+        .compare-btn:hover {
+            background: #229954;
+        }
+
+        .compare-btn:disabled {
+            background: #bdc3c7;
+            cursor: not-allowed;
+        }
+
+        .results-section {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 20px;
+            display: none;
+        }
+
+        .results-section h3 {
+            margin-bottom: 20px;
+            color: #2c3e50;
+        }
+
+        .result-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+
+        .result-table th,
+        .result-table td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+
+        .result-table th {
+            background: #f8f9fa;
+            font-weight: bold;
+        }
+
+        .result-table tr:nth-child(even) {
+            background: #f8f9fa;
+        }
+
+        .difference {
+            background: #ffe6e6 !important;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+            font-size: 16px;
+            color: #666;
+        }
+
+        .error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 15px 0;
+        }
+
+        .success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 15px 0;
+        }
+
+        @media (max-width: 768px) {
+            .upload-section {
+                flex-direction: column;
+            }
+            
+            .container {
+                padding: 15px;
+            }
+            
+            h1 {
+                font-size: 1.5rem;
+            }
+            
+            .result-table {
+                font-size: 14px;
+            }
+            
+            .result-table th,
+            .result-table td {
+                padding: 8px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>美容室売上照合システム</h1>
+        
+        <div class="upload-section">
+            <div class="upload-box" id="csvUploadBox">
+                <h3>Square CSV</h3>
+                <p>SquareのCSVファイルをアップロードしてください</p>
+                <input type="file" id="csvFile" class="file-input" accept=".csv">
+                <button class="upload-btn" onclick="document.getElementById('csvFile').click()">
+                    ファイルを選択
+                </button>
+                <div class="file-info" id="csvFileInfo"></div>
+            </div>
+            
+            <div class="upload-box" id="pdfUploadBox">
+                <h3>サロンボード PDF</h3>
+                <p>サロンボードのPDFファイルをアップロードしてください</p>
+                <input type="file" id="pdfFile" class="file-input" accept=".pdf">
+                <button class="upload-btn" onclick="document.getElementById('pdfFile').click()">
+                    ファイルを選択
+                </button>
+                <div class="file-info" id="pdfFileInfo"></div>
+            </div>
+        </div>
+        
+        <button class="compare-btn" id="compareBtn" disabled onclick="compareData()">
+            照合開始
+        </button>
+        
+        <div class="results-section" id="resultsSection">
+            <h3>照合結果</h3>
+            <div id="resultsContent"></div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>
+        // PDF.js読み込み確認
+        if (typeof pdfjsLib !== 'undefined') {
+            console.log('✅ PDF.js loaded successfully');
+        } else {
+            console.error('❌ PDF.js failed to load');
+        }
+        
+        // 基本的なDOM要素確認
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('🔍 DOM elements check:');
+            console.log('csvFile:', document.getElementById('csvFile'));
+            console.log('pdfFile:', document.getElementById('pdfFile'));
+            console.log('csvUploadBox:', document.getElementById('csvUploadBox'));
+            console.log('pdfUploadBox:', document.getElementById('pdfUploadBox'));
+        });
+    </script>
+    <script src="app.js"></script>
+</body>
+</html>
