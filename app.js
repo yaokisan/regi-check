@@ -150,12 +150,11 @@ async function parseCSV(file) {
     // 必要な列のインデックスを取得
     const dateIndex = headers.indexOf('日付');
     const timeIndex = headers.indexOf('時間');
-    const netSalesIndex = headers.indexOf('純売上高');
-    const taxIndex = headers.indexOf('税金');
+    const totalAmountIndex = headers.indexOf('受取合計額');
     const discountIndex = headers.indexOf('ディスカウント');
     const detailsIndex = headers.indexOf('詳細');
     
-    if (dateIndex === -1 || timeIndex === -1 || netSalesIndex === -1 || taxIndex === -1) {
+    if (dateIndex === -1 || timeIndex === -1 || totalAmountIndex === -1) {
         throw new Error('必要な列が見つかりません');
     }
     
@@ -166,19 +165,15 @@ async function parseCSV(file) {
         if (!line) continue;
         
         const columns = line.split('\t');
-        if (columns.length < Math.max(dateIndex, timeIndex, netSalesIndex, taxIndex, discountIndex, detailsIndex) + 1) {
+        if (columns.length < Math.max(dateIndex, timeIndex, totalAmountIndex, discountIndex, detailsIndex) + 1) {
             continue;
         }
         
         const date = columns[dateIndex];
         const time = columns[timeIndex];
-        const netSales = parseAmount(columns[netSalesIndex]);
-        const tax = parseAmount(columns[taxIndex]);
+        const totalAmount = parseAmount(columns[totalAmountIndex]);
         const discount = parseAmount(columns[discountIndex]);
         const details = columns[detailsIndex] || '';
-        
-        // 純売上高 + 税金 = サロンボードの現計に対応
-        const totalAmount = netSales + tax;
         
         // 担当者名を詳細から抽出
         const staffName = extractStaffName(details);
@@ -187,7 +182,7 @@ async function parseCSV(file) {
             data.push({
                 date,
                 time,
-                totalAmount, // 純売上高 + 税金
+                totalAmount, // 受取合計額をそのまま使用
                 discount: Math.abs(discount), // 絶対値に変換
                 staffName,
                 details,
@@ -499,8 +494,8 @@ function compareData() {
     
     setTimeout(() => {
         try {
-            const differences = findDifferences(csvData, pdfData);
-            displayResults(differences);
+            const results = performTimeBasedMatching(csvData, pdfData);
+            displayNewResults(results);
         } catch (error) {
             showError('照合処理中にエラーが発生しました: ' + error.message);
         }
@@ -571,7 +566,10 @@ function compareDates(date1, date2) {
     // 2025/6/22 のような形式を正規化
     const normalize = (date) => {
         const parts = date.split('/');
-        return `${parts[0]}/${parts[1].padStart(2, '0')}/${parts[2].padStart(2, '0')}`;
+        const year = parts[0];
+        const month = parts[1].padStart(2, '0');
+        const day = parts[2].padStart(2, '0');
+        return `${year}/${month}/${day}`;
     };
     
     return normalize(date1) === normalize(date2);
@@ -685,4 +683,212 @@ function showError(message) {
     
     resultsSection.style.display = 'block';
     resultsContent.innerHTML = `<div class="error">${message}</div>`;
+}
+
+// 新しい時間ベースの照合関数
+function performTimeBasedMatching(csvData, pdfData) {
+    const results = {
+        matched: [],
+        errors: [],
+        noTimeInfo: []
+    };
+    
+    console.log('🔍 時間ベース照合開始');
+    console.log('CSV records:', csvData.length);
+    console.log('PDF records:', pdfData.length);
+    
+    // PDFデータを時刻情報の有無で分類
+    const pdfWithTime = pdfData.filter(record => record.time && record.time !== '');
+    const pdfWithoutTime = pdfData.filter(record => !record.time || record.time === '');
+    
+    // 時刻情報なしのPDFデータを別カテゴリーに追加
+    pdfWithoutTime.forEach(record => {
+        results.noTimeInfo.push({
+            pdfRecord: record,
+            type: 'no_time_info'
+        });
+    });
+    
+    // CSVデータの各レコードについて照合
+    for (const csvRecord of csvData) {
+        console.log(`\n📊 CSV: ${csvRecord.date} ${csvRecord.time} ¥${csvRecord.totalAmount}`);
+        
+        // 受取合計額が0円の場合はイレギュラーとして処理
+        if (csvRecord.totalAmount === 0) {
+            console.log('  ❓ 受取合計額が0円のためイレギュラー扱い');
+            results.noTimeInfo.push({
+                csvRecord: csvRecord,
+                type: 'zero_amount'
+            });
+            continue;
+        }
+        
+        // CSV側の時刻を基準に前後5分の範囲でPDFデータを抽出
+        const candidatePdfRecords = pdfWithTime.filter(pdfRecord => {
+            if (!compareDates(csvRecord.date, pdfRecord.date)) return false;
+            return isWithinTimeRange(csvRecord.time, pdfRecord.time, 5);
+        });
+        
+        console.log(`  候補PDF数: ${candidatePdfRecords.length}`);
+        
+        // 金額とディスカウント/ポイントが一致するものを探す
+        const matchedRecord = candidatePdfRecords.find(pdfRecord => {
+            return csvRecord.totalAmount === pdfRecord.totalAmount &&
+                   csvRecord.discount === pdfRecord.pointUsage;
+        });
+        
+        if (matchedRecord) {
+            console.log('  ✅ 完全一致');
+            results.matched.push({
+                csvRecord,
+                pdfRecord: matchedRecord,
+                type: 'matched'
+            });
+        } else {
+            console.log('  ❌ 不一致');
+            results.errors.push({
+                csvRecord,
+                candidatePdfRecords,
+                type: 'mismatch'
+            });
+        }
+    }
+    
+    console.log(`\n📋 照合結果: 一致=${results.matched.length}, エラー=${results.errors.length}, 時刻なし=${results.noTimeInfo.length}`);
+    return results;
+}
+
+// 時間範囲チェック関数
+function isWithinTimeRange(baseTime, targetTime, minutesRange) {
+    const parseTime = (timeStr) => {
+        const [hours, minutes, seconds] = timeStr.split(':').map(Number);
+        return hours * 60 + minutes; // 分単位に変換（秒は無視）
+    };
+    
+    const baseMinutes = parseTime(baseTime);
+    const targetMinutes = parseTime(targetTime);
+    const diff = Math.abs(baseMinutes - targetMinutes);
+    
+    return diff <= minutesRange;
+}
+
+// 新しい結果表示関数
+function displayNewResults(results) {
+    const resultsContent = document.getElementById('resultsContent');
+    const total = results.matched.length + results.errors.length + results.noTimeInfo.length;
+    
+    let html = '';
+    
+    // サマリー情報
+    html += '<div class="summary-section">';
+    html += `<h4>照合結果サマリー</h4>`;
+    html += `<p>総件数: ${total}件</p>`;
+    html += `<p>✅ 正常: ${results.matched.length}件 (${Math.round(results.matched.length / total * 100)}%)</p>`;
+    html += `<p>⚠️ エラー: ${results.errors.length}件</p>`;
+    html += `<p>❓ イレギュラー: ${results.noTimeInfo.length}件</p>`;
+    html += '</div>';
+    
+    // タブまたはセクション形式で結果を表示
+    html += '<div class="results-tabs">';
+    
+    // 正常に照合済み
+    if (results.matched.length > 0) {
+        html += '<div class="result-section">';
+        html += '<h4>✅ 正常に照合済み（' + results.matched.length + '件）</h4>';
+        html += '<div class="section-content" style="display: none;">';
+        results.matched.forEach(item => {
+            html += '<div class="matched-item">';
+            html += `<p>CSV: ${item.csvRecord.date} ${item.csvRecord.time} - ¥${item.csvRecord.totalAmount.toLocaleString()}</p>`;
+            html += `<p>PDF: ${item.pdfRecord.date} ${item.pdfRecord.time} - ¥${item.pdfRecord.totalAmount.toLocaleString()}</p>`;
+            html += '</div>';
+        });
+        html += '</div>';
+        html += '</div>';
+    }
+    
+    // 照合エラー
+    if (results.errors.length > 0) {
+        html += '<div class="result-section">';
+        html += '<h4>⚠️ 照合エラー（' + results.errors.length + '件）</h4>';
+        html += '<div class="section-content">';
+        results.errors.forEach(item => {
+            html += '<div class="error-item">';
+            html += '<div class="csv-data">';
+            html += '<strong>【CSV側データ】</strong><br>';
+            html += `時刻: ${item.csvRecord.time}<br>`;
+            html += `受取合計額: ¥${item.csvRecord.totalAmount.toLocaleString()}<br>`;
+            html += `ディスカウント: ¥${item.csvRecord.discount.toLocaleString()}<br>`;
+            html += `詳細: ${item.csvRecord.details}<br>`;
+            html += '</div>';
+            
+            html += '<div class="pdf-candidates">';
+            html += '<strong>【候補となるPDF側データ（前後5分）】</strong><br>';
+            if (item.candidatePdfRecords.length === 0) {
+                html += '該当なし';
+            } else {
+                item.candidatePdfRecords.forEach((pdf, index) => {
+                    const match = item.csvRecord.totalAmount === pdf.totalAmount && 
+                                item.csvRecord.discount === pdf.pointUsage;
+                    html += `${index + 1}. ${pdf.time} - 現計: ¥${pdf.totalAmount.toLocaleString()} / ポイント: ¥${pdf.pointUsage.toLocaleString()} ${match ? '✅' : '❌'}<br>`;
+                });
+            }
+            html += '</div>';
+            html += '</div>';
+        });
+        html += '</div>';
+        html += '</div>';
+    }
+    
+    // イレギュラー項目
+    if (results.noTimeInfo.length > 0) {
+        html += '<div class="result-section">';
+        html += '<h4>❓ イレギュラー項目（' + results.noTimeInfo.length + '件）</h4>';
+        html += '<div class="section-content">';
+        
+        // 0円のCSVデータ
+        const zeroAmountItems = results.noTimeInfo.filter(item => item.type === 'zero_amount');
+        if (zeroAmountItems.length > 0) {
+            html += '<p>⚠️ 以下のCSVデータは受取合計額が0円です</p>';
+            zeroAmountItems.forEach(item => {
+                html += '<div class="no-time-item">';
+                html += `時刻: ${item.csvRecord.time}<br>`;
+                html += `受取合計額: ¥0<br>`;
+                html += `ディスカウント: ¥${item.csvRecord.discount.toLocaleString()}<br>`;
+                html += `詳細: ${item.csvRecord.details}<br>`;
+                html += '</div>';
+            });
+        }
+        
+        // 時刻情報なしのPDFデータ
+        const noTimeInfoItems = results.noTimeInfo.filter(item => item.type === 'no_time_info');
+        if (noTimeInfoItems.length > 0) {
+            html += '<p>⚠️ 以下のPDFデータは時刻情報がありません</p>';
+            noTimeInfoItems.forEach(item => {
+                html += '<div class="no-time-item">';
+                html += `現計: ¥${item.pdfRecord.totalAmount.toLocaleString()} / ポイント: ¥${item.pdfRecord.pointUsage.toLocaleString()}<br>`;
+                if (item.pdfRecord.staffName) {
+                    html += `担当者: ${item.pdfRecord.staffName}<br>`;
+                }
+                html += `詳細: ${item.pdfRecord.originalLine || '情報なし'}<br>`;
+                html += '</div>';
+            });
+        }
+        
+        html += '<p>手動での確認が必要です</p>';
+        html += '</div>';
+        html += '</div>';
+    }
+    
+    html += '</div>';
+    
+    resultsContent.innerHTML = html;
+    
+    // セクションの展開/折りたたみ機能を追加
+    document.querySelectorAll('.result-section h4').forEach(header => {
+        header.style.cursor = 'pointer';
+        header.addEventListener('click', function() {
+            const content = this.nextElementSibling;
+            content.style.display = content.style.display === 'none' ? 'block' : 'none';
+        });
+    });
 }

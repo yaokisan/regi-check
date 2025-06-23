@@ -176,6 +176,95 @@
             margin: 15px 0;
         }
 
+        /* 新しい照合結果表示用スタイル */
+        .summary-section {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .summary-section h4 {
+            margin-bottom: 10px;
+            color: #2c3e50;
+        }
+
+        .summary-section p {
+            margin: 5px 0;
+            font-size: 16px;
+        }
+
+        .results-tabs {
+            margin-top: 20px;
+        }
+
+        .result-section {
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            overflow: hidden;
+        }
+
+        .result-section h4 {
+            background: #f8f9fa;
+            padding: 15px;
+            margin: 0;
+            border-bottom: 1px solid #e0e0e0;
+            cursor: pointer;
+            user-select: none;
+            font-size: 18px;
+        }
+
+        .result-section h4:hover {
+            background: #e9ecef;
+        }
+
+        .section-content {
+            padding: 20px;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+
+        .matched-item {
+            padding: 10px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .matched-item:last-child {
+            border-bottom: none;
+        }
+
+        .error-item {
+            background: #fff5f5;
+            border: 1px solid #ffe0e0;
+            border-radius: 6px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+
+        .csv-data, .pdf-candidates {
+            margin-bottom: 15px;
+        }
+
+        .csv-data strong, .pdf-candidates strong {
+            color: #2c3e50;
+            display: block;
+            margin-bottom: 8px;
+        }
+
+        .no-time-item {
+            background: #fff9e6;
+            border: 1px solid #ffe6b3;
+            border-radius: 6px;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+
+        .section-content p {
+            margin: 10px 0;
+        }
+
         @media (max-width: 768px) {
             .upload-section {
                 flex-direction: column;
